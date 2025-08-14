@@ -23,15 +23,15 @@ cd dgx-cloud-regulated-demo
 code .
 ```
 
-## 1) Quick Start
+## Quick Start
 
-### Terminal A - Bring everything up
-# Build
+## Terminal A - Bring everything up
+### Build
 ```bash
 docker build -t cost-estimator:latest -f app/Dockerfile app
 ```
 
-# Kind up
+### Kind up
 ```bash
 kind delete cluster --name dgx-demo || true
 kind create cluster --name dgx-demo --image kindest/node:v1.28.9
@@ -39,12 +39,12 @@ kubectl config use-context kind-dgx-demo
 kubectl wait --for=condition=Ready node --all --timeout=180s
 ```
 
-# Load image into node
+### Load image into node
 ```bash
 kind load docker-image cost-estimator:latest --name dgx-demo
 ```
 
-# Terraform
+### Terraform
 ```bash
 cd infra
 terraform init
@@ -52,12 +52,12 @@ terraform apply -auto-approve
 cd ..
 ```
 
-# Expose the service locally (keeps running in this terminal)
+### Expose the service locally (keeps running in this terminal)
 ```bash
 kubectl -n restricted port-forward svc/cost-estimator-service 8080:80
 ```
 
-### Terminal B - run & test
+## Terminal B - run & test
 ```bash
 curl -s -X POST http://localhost:8080/estimate/training \
   -H 'Content-Type: application/json' \
@@ -65,17 +65,17 @@ curl -s -X POST http://localhost:8080/estimate/training \
 ```
 
 ## Teardown
-# Stop any local port-forward on 8080
+### Stop any local port-forward on 8080
 ```bash
 lsof -ti tcp:8080 | xargs -r kill
 ```
 
-# Destroy Terraform resources (if cluster exists)
+### Destroy Terraform resources (if cluster exists)
 ```bash
 cd infra && terraform destroy -auto-approve || true; cd ..
 ```
 
-# Delete Kind cluster and local image
+### Delete Kind cluster and local image
 ```bash
 kind delete cluster --name dgx-demo || true
 docker image rm -f cost-estimator:latest || true
