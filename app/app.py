@@ -4,7 +4,7 @@ from planner import load_policy, plan_training, policy_check, sign_attestation
 import os, time
 
 app = Flask(__name__)
-CATALOG = load_catalog("data/gpu_catalog.csv")    # merges Azure CSV if present (handled in estimator.load_catalog)
+CATALOG = load_catalog("data/gpu_catalog.csv")    # merges gpu_catalog_from_azure.csv if present
 POLICY  = load_policy("policy/policy.json")
 
 @app.route("/")
