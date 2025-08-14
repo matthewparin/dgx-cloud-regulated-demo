@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
 from estimator import load_catalog, training_estimate
+from planner import load_policy, plan_training, policy_check, sign_attestation
+import os, time
 
 app = Flask(__name__)
-CATALOG = load_catalog("data/gpu_catalog.csv")
+CATALOG = load_catalog("data/gpu_catalog.csv")    # merges Azure CSV if present (handled in estimator.load_catalog)
+POLICY  = load_policy("policy/policy.json")
 
 @app.route("/")
 def root():
@@ -24,29 +27,79 @@ def simple_estimate():
 def catalog():
     return jsonify({"gpus": list(CATALOG.values())})
 
-@app.route("/estimate/training", methods=["POST", "GET"])
+# Optimizer: propose N best plans by cost/time (respects target_time_days/budget if provided)
+@app.route("/plan/training", methods=["POST"])
+def plan_training_ep():
+    p = request.get_json(force=True)
+    plans = plan_training(
+        CATALOG,
+        model_params_b=float(p.get("model_params_b", 7.0)),
+        tokens_b=float(p.get("tokens_b", 1.0)),
+        gpu_models=p.get("gpu_models"),
+        num_gpus_list=p.get("num_gpus_list"),
+        price_tiers=p.get("price_tiers"),
+        target_time_days=p.get("target_time_days"),
+        budget_usd=p.get("budget_usd"),
+        efficiency=float(p.get("efficiency", 0.30)),
+        utilization=float(p.get("utilization", 0.85)),
+    )
+    return jsonify({"plans": plans})
+
+# Pre-flight policy gate + attestation (HMAC)
+@app.route("/submit", methods=["POST"])
+def submit_job():
+    m = request.get_json(force=True)
+    # choose a plan using the optimizer
+    plans = plan_training(
+        CATALOG,
+        model_params_b=float(m.get("model_params_b", 7.0)),
+        tokens_b=float(m.get("tokens_b", 1.0)),
+        gpu_models=m.get("gpu_models"),
+        num_gpus_list=m.get("num_gpus_list"),
+        price_tiers=m.get("price_tiers"),
+        target_time_days=m.get("target_time_days"),
+        budget_usd=m.get("budget_usd"),
+        efficiency=float(m.get("efficiency", 0.30)),
+        utilization=float(m.get("utilization", 0.85)),
+    )
+    if not plans:
+        return jsonify({"error":"no feasible plan found"}), 400
+    best = plans[0]
+    violations = policy_check(m, best, POLICY)
+    status = "approved" if not violations else "rejected"
+    att = {
+        "status": status,
+        "timestamp": int(time.time()),
+        "manifest": m,
+        "plan": best,
+        "policy_version": "policy/policy.json"
+    }
+    key = os.getenv("ATTEST_HMAC_KEY")
+    if not key:
+        return jsonify({"error":"attestation key missing (ATTEST_HMAC_KEY)","attestation":att,"violations":violations}), 500
+    signed = sign_attestation(key, att)
+    code = 200 if status=="approved" else 400
+    return jsonify({**signed, "violations": violations}), code
+
+# Original training estimator (kept for convenience via GET/POST)
+@app.route("/estimate/training", methods=["POST","GET"])
 def estimate_training():
-    # Accept JSON body (POST) or query params (GET)
     payload = request.get_json(silent=True) or {}
     qp = request.args or {}
     def g(name, default=None, cast=float):
-        if name in payload:
-            return cast(payload[name])
-        if name in qp:
-            return cast(qp.get(name))
+        if name in payload: return cast(payload[name])
+        if name in qp:      return cast(qp.get(name))
         return default
-
-    gpu_model = g("gpu_model", cast=str) or "H100-80GB"
+    gpu_model = g("gpu_model", "H100-80GB", str)
     model_params_b = g("model_params_b", 7.0)
     tokens_b = g("tokens_b", 1.0)
-    num_gpus = g("num_gpus", None, cast=int)
+    num_gpus = g("num_gpus", None, int)
     target_time_days = g("target_time_days", None)
     efficiency = g("efficiency", 0.30)
     utilization = g("utilization", 0.85)
-    price_tier = (g("price_tier", "on_demand", cast=str) or "on_demand").lower()
+    price_tier = (g("price_tier", "on_demand", str) or "on_demand").lower()
     energy_cost_per_kwh = g("energy_cost_per_kwh", 0.12)
     tdp_factor = g("tdp_factor", 0.70)
-
     try:
         result = training_estimate(
             CATALOG, gpu_model, model_params_b, tokens_b,
@@ -58,41 +111,6 @@ def estimate_training():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
-@app.route("/estimate/training-grid", methods=["POST"])
-def estimate_training_grid():
-    data = request.get_json(force=True)
-    gpu_models = data.get("gpu_models") or ["H100-80GB"]
-    num_gpus_list = data.get("num_gpus_list") or [1, 2, 4, 8]
-    model_params_b = float(data.get("model_params_b", 7.0))
-    tokens_b = float(data.get("tokens_b", 1.0))
-    efficiency = float(data.get("efficiency", 0.30))
-    utilization = float(data.get("utilization", 0.85))
-    price_tier = str(data.get("price_tier", "on_demand")).lower()
-    energy_cost_per_kwh = float(data.get("energy_cost_per_kwh", 0.12))
-    tdp_factor = float(data.get("tdp_factor", 0.70))
-
-    rows = []
-    for m in gpu_models:
-        for n in num_gpus_list:
-            try:
-                r = training_estimate(
-                    CATALOG, m, model_params_b, tokens_b,
-                    num_gpus=int(n), target_time_days=None,
-                    efficiency=efficiency, utilization=utilization,
-                    price_tier=price_tier, energy_cost_per_kwh=energy_cost_per_kwh,
-                    tdp_factor=tdp_factor,
-                )
-                rows.append({
-                    "gpu_model": m,
-                    "num_gpus": int(n),
-                    "wall_time_hours": r["results"]["wall_time_hours"],
-                    "compute_cost_usd": r["results"]["compute_cost_usd"],
-                    "total_cost_usd": r["results"]["total_cost_usd"],
-                })
-            except Exception as e:
-                rows.append({"gpu_model": m, "num_gpus": int(n), "error": str(e)})
-    return jsonify({"grid": rows})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
