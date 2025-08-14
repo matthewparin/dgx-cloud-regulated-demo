@@ -24,13 +24,12 @@ Security posture:
 ## Prereqs (macOS)
 - **Docker Desktop** (running)
 - **Homebrew** + CLIs:
-  ```bash
-  brew install kubernetes-cli kind
-  brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+```bash
+brew install kubernetes-cli kind
+brew tap hashicorp/tap && brew install hashicorp/tap/terraform
 ```
 
-
-## 0) Fork → Clone
+## Fork → Clone
 
 1) On GitHub, click **Fork** → your account.
 2) Clone your fork and open it:
