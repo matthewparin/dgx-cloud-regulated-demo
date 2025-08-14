@@ -18,11 +18,13 @@
 1) On GitHub, click **Fork** → your account.
 2) Clone your fork and open it:
 ```bash
-git clone https://github.com/<YOUR_GH_USERNAME>/dgx-cloud-regulated-demo.git
+git clone https://github.com/matthewparin/dgx-cloud-regulated-demo.git
 cd dgx-cloud-regulated-demo
 code .
 
-## Quick Start
+---
+
+## 1) Quick Start
 
 ### Terminal A - Bring everything up
 # Build
