@@ -1,15 +1,34 @@
-# DGX Cloud Regulated Environment Demo
-*A compact, production-minded slice of a secure AI platform for regulated environments (gov/health/finance).*
+# DGX Cloud Regulated Demo
+A compact, **production-minded** example of running a secure AI microservice on Kubernetes with **Pod Security Standards (restricted)** and **infrastructure-as-code**.
 
-**What you get**
-- **App**: Python/Flask service with endpoints for a **GPU training cost/time/energy** estimator
-  - `/` (health), `/catalog` (GPU catalog), `/estimate` (simple),
-    `/estimate/training` (single scenario), `/estimate/training-grid` (batch)
-- **Security**: Docker image runs **non-root**; K8s namespace enforces **Pod Security Standards (restricted)**; deployment hardened (no priv-esc, drop **ALL** caps, read-only FS, seccomp RuntimeDefault)
-- **Infra**: **Terraform** defines namespace + labels, LimitRange/ResourceQuota, Deployment, Service
-- **Orchestration**: **Kind** (Kubernetes-in-Docker) for portable local clusters
-- **Data**: Curated **GPU catalog** + optional **Azure Retail Prices** fetcher to populate live per-GPU $/h
-- **Polish**: **Liveness/Readiness** probes, **Makefile**, and CI (Terraform fmt/validate + Docker build)
+The app exposes:
+- `/` – health
+- `/estimate` – simple legacy estimator (`nodes * hours * 10`)
+- `/catalog` – GPU catalog (editable CSV)
+- `/estimate/training` – realistic **time / cost / energy** training estimate
+- `/estimate/training-grid` – run a grid across GPU counts/models
+
+This repo intentionally keeps the surface area tiny: **Flask only**, a minimal Docker image, and **Terraform** that deploys **just** a namespace, hardened Deployment (with probes), and a Service.
+
+---
+
+
+Security posture:
+- **PSS: restricted** on the namespace (prevents non-compliant pods)
+- Container **non-root**, `allowPrivilegeEscalation: false`, **drop ALL** caps, **read-only** root FS, `seccompProfile: RuntimeDefault`
+- Liveness/Readiness probes
+- Resource requests/limits (sane defaults)
+
+---
+
+## Prereqs (macOS)
+- **Docker Desktop** (running)
+- **Homebrew** + CLIs:
+  ```bash
+  brew install kubernetes-cli kind
+  brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+```
+
 
 ---
 
@@ -25,13 +44,18 @@ code .
 
 ## Quick Start
 
-## Terminal A - Bring everything up
-### Build
+## Terminal A - Build, Create Cluster, Deploy
+# 0) Make sure Docker Desktop is running
+```bash
+open -a Docker || true
+```
+
+# 1) Build the app image
 ```bash
 docker build -t cost-estimator:latest -f app/Dockerfile app
 ```
 
-### Kind up
+# 2) Create (or recreate) the Kind cluster
 ```bash
 kind delete cluster --name dgx-demo || true
 kind create cluster --name dgx-demo --image kindest/node:v1.28.9
@@ -39,12 +63,12 @@ kubectl config use-context kind-dgx-demo
 kubectl wait --for=condition=Ready node --all --timeout=180s
 ```
 
-### Load image into node (may need to do only once)
+# 3) Load the local image into the Kind node (air-gap-friendly)
 ```bash
 kind load docker-image cost-estimator:latest --name dgx-demo
 ```
 
-### Terraform
+# 4) Apply the infrastructure
 ```bash
 cd infra
 terraform init
@@ -52,31 +76,20 @@ terraform apply -auto-approve
 cd ..
 ```
 
-### Expose the service locally (keeps running in this terminal)
+## Terminal B - Run the service locally
 ```bash
 kubectl -n restricted port-forward svc/cost-estimator-service 8080:80
 ```
 
-## Terminal B - run & test
-```bash
-curl -s -X POST http://localhost:8080/estimate/training \
-  -H 'Content-Type: application/json' \
-  -d '{"gpu_model":"H100-80GB","num_gpus":8,"model_params_b":7,"tokens_b":1,"price_tier":"on_demand"}' | jq .
-```
-
 ## Teardown
-### Stop any local port-forward on 8080
 ```bash
+# Stop port-forward
 lsof -ti tcp:8080 | xargs -r kill
-```
 
-### Destroy Terraform resources (if cluster exists)
-```bash
+# Destroy Terraform resources (if cluster up)
 cd infra && terraform destroy -auto-approve || true; cd ..
-```
 
-### Delete Kind cluster and local image
-```bash
+# Delete Kind cluster and local image
 kind delete cluster --name dgx-demo || true
 docker image rm -f cost-estimator:latest || true
 ```
@@ -102,5 +115,7 @@ kubectl -n restricted port-forward svc/cost-estimator-service 9090:80
 
 Terraform “connection refused” → cluster not ready; recreate it:
 ```bash
-kind delete cluster --name dgx-demo && make kind-up
+kind delete cluster --name dgx-demo || true
+kind create cluster --name dgx-demo --image kindest/node:v1.28.9
+kubectl get nodes
 ```
