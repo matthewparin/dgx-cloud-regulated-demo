@@ -8,7 +8,6 @@ terraform {
   }
 }
 provider "kubernetes" {
-  # pathexpand avoids issues with "~" in some shells
   config_path    = pathexpand("~/.kube/config")
   config_context = "kind-dgx-demo"
 }
@@ -17,7 +16,7 @@ resource "kubernetes_namespace" "restricted" {
     name = "restricted"
     labels = {
       "pod-security.kubernetes.io/enforce"         = "restricted"
-      "pod-security.kubernetes.io/enforce-version" = "latest"
+      "pod-security.kubernetes.io/enforce-version" = "v1.28"
     }
   }
 }
@@ -33,6 +32,7 @@ resource "kubernetes_deployment" "costapp" {
     template {
       metadata { labels = { app = "cost-estimator" } }
       spec {
+        automount_service_account_token = false
         container {
           name              = "cost-estimator"
           image             = "cost-estimator:latest"
@@ -43,8 +43,12 @@ resource "kubernetes_deployment" "costapp" {
             requests = { cpu = "100m", memory = "100Mi" }
           }
           security_context {
+            run_as_user                = 10001
             run_as_non_root            = true
+            read_only_root_filesystem  = true
             allow_privilege_escalation = false
+            capabilities { drop = ["ALL"] }
+            seccomp_profile { type = "RuntimeDefault" }
           }
         }
       }
@@ -57,8 +61,12 @@ resource "kubernetes_service" "costapp_service" {
     namespace = kubernetes_namespace.restricted.metadata[0].name
   }
   spec {
-    selector = { app = kubernetes_deployment.costapp.metadata[0].labels.app }
-    port { port = 80, target_port = 5000, protocol = "TCP" }
+    selector = { app = "cost-estimator" }
+    port {
+      port        = 80
+      target_port = 5000
+      protocol    = "TCP"
+    }
     type = "ClusterIP"
   }
 }
