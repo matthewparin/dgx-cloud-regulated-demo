@@ -39,7 +39,7 @@ kubectl config use-context kind-dgx-demo
 kubectl wait --for=condition=Ready node --all --timeout=180s
 ```
 
-### Load image into node
+### Load image into node (may need to do only once)
 ```bash
 kind load docker-image cost-estimator:latest --name dgx-demo
 ```
