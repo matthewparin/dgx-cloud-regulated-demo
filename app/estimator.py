@@ -1,21 +1,35 @@
-import csv, math
+import csv, math, os
 
 def load_catalog(path: str):
-    out = {}
-    with open(path, newline='') as f:
-        r = csv.DictReader(f)
-        for row in r:
-            out[row["gpu_model"]] = {
-                "gpu_model": row["gpu_model"],
-                "vram_gb": float(row["vram_gb"]),
-                "tflops_fp16": float(row["tflops_fp16"]),
-                "rates": {
-                    "on_demand": float(row["on_demand_usd_per_hour"]),
-                    "spot": float(row["spot_usd_per_hour"]),
-                    "reserved": float(row["reserved_usd_per_hour"]),
-                },
-                "tdp_watts": float(row["tdp_watts"]),
-            }
+    """Load the GPU catalog and optionally merge Azure-provided data.
+
+    If a sibling file named ``gpu_catalog_from_azure.csv`` exists, its
+    contents are merged into the primary catalog. Rows from the Azure file
+    override entries with the same ``gpu_model`` found in the base catalog.
+    """
+
+    def read_csv(p):
+        data = {}
+        with open(p, newline="") as f:
+            r = csv.DictReader(f)
+            for row in r:
+                data[row["gpu_model"]] = {
+                    "gpu_model": row["gpu_model"],
+                    "vram_gb": float(row["vram_gb"]),
+                    "tflops_fp16": float(row["tflops_fp16"]),
+                    "rates": {
+                        "on_demand": float(row["on_demand_usd_per_hour"]),
+                        "spot": float(row["spot_usd_per_hour"]),
+                        "reserved": float(row["reserved_usd_per_hour"]),
+                    },
+                    "tdp_watts": float(row["tdp_watts"]),
+                }
+        return data
+
+    out = read_csv(path)
+    azure_path = os.path.join(os.path.dirname(path), "gpu_catalog_from_azure.csv")
+    if os.path.exists(azure_path):
+        out.update(read_csv(azure_path))
     return out
 
 def choose_rate(catalog_row, price_tier: str):
