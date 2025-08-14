@@ -30,8 +30,6 @@ Security posture:
 ```
 
 
----
-
 ## 0) Fork → Clone
 
 1) On GitHub, click **Fork** → your account.
@@ -45,17 +43,17 @@ code .
 ## Quick Start
 
 ## Terminal A - Build, Create Cluster, Deploy
-# 0) Make sure Docker Desktop is running
+### 0) Make sure Docker Desktop is running
 ```bash
 open -a Docker || true
 ```
 
-# 1) Build the app image
+### 1) Build the app image
 ```bash
 docker build -t cost-estimator:latest -f app/Dockerfile app
 ```
 
-# 2) Create (or recreate) the Kind cluster
+### 2) Create (or recreate) the Kind cluster
 ```bash
 kind delete cluster --name dgx-demo || true
 kind create cluster --name dgx-demo --image kindest/node:v1.28.9
@@ -63,12 +61,12 @@ kubectl config use-context kind-dgx-demo
 kubectl wait --for=condition=Ready node --all --timeout=180s
 ```
 
-# 3) Load the local image into the Kind node (air-gap-friendly)
+### 3) Load the local image into the Kind node (air-gap-friendly)
 ```bash
 kind load docker-image cost-estimator:latest --name dgx-demo
 ```
 
-# 4) Apply the infrastructure
+### 4) Apply the infrastructure
 ```bash
 cd infra
 terraform init
@@ -94,7 +92,7 @@ kind delete cluster --name dgx-demo || true
 docker image rm -f cost-estimator:latest || true
 ```
 
-### Troubleshooting (fast)
+## Troubleshooting
 
 ImagePullBackOff → reload image and restart:
 ```bash
