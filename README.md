@@ -21,47 +21,62 @@
 git clone https://github.com/matthewparin/dgx-cloud-regulated-demo.git
 cd dgx-cloud-regulated-demo
 code .
-
----
+```
 
 ## 1) Quick Start
 
 ### Terminal A - Bring everything up
 # Build
+```bash
 docker build -t cost-estimator:latest -f app/Dockerfile app
+```
 
 # Kind up
+```bash
 kind delete cluster --name dgx-demo || true
 kind create cluster --name dgx-demo --image kindest/node:v1.28.9
 kubectl config use-context kind-dgx-demo
 kubectl wait --for=condition=Ready node --all --timeout=180s
+```
 
 # Load image into node
+```bash
 kind load docker-image cost-estimator:latest --name dgx-demo
+```
 
 # Terraform
+```bash
 cd infra
 terraform init
 terraform apply -auto-approve
 cd ..
+```
 
 # Expose the service locally (keeps running in this terminal)
+```bash
 kubectl -n restricted port-forward svc/cost-estimator-service 8080:80
+```
 
 ### Terminal B - run & test
+```bash
 curl -s -X POST http://localhost:8080/estimate/training \
   -H 'Content-Type: application/json' \
   -d '{"gpu_model":"H100-80GB","num_gpus":8,"model_params_b":7,"tokens_b":1,"price_tier":"on_demand"}' | jq .
-
+```
 
 ## Teardown
 # Stop any local port-forward on 8080
+```bash
 lsof -ti tcp:8080 | xargs -r kill
+```
 
 # Destroy Terraform resources (if cluster exists)
+```bash
 cd infra && terraform destroy -auto-approve || true; cd ..
+```
 
 # Delete Kind cluster and local image
+```bash
 kind delete cluster --name dgx-demo || true
 docker image rm -f cost-estimator:latest || true
-
+```
