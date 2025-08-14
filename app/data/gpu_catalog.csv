@@ -1,0 +1,6 @@
+gpu_model,vram_gb,tflops_fp16,on_demand_usd_per_hour,spot_usd_per_hour,reserved_usd_per_hour,tdp_watts
+H100-80GB,80,800,6.50,3.90,5.00,350
+A100-80GB,80,312,4.10,2.50,3.20,300
+L40S-48GB,48,181,1.90,1.10,1.50,350
+A10-24GB,24,125,1.20,0.60,0.90,150
+L4-24GB,24,60,0.70,0.35,0.50,72
