@@ -80,3 +80,27 @@ cd infra && terraform destroy -auto-approve || true; cd ..
 kind delete cluster --name dgx-demo || true
 docker image rm -f cost-estimator:latest || true
 ```
+
+### Troubleshooting (fast)
+
+ImagePullBackOff → reload image and restart:
+```bash
+kind load docker-image cost-estimator:latest --name dgx-demo
+kubectl -n restricted rollout restart deploy/cost-estimator
+```
+
+Empty Service ENDPOINTS → readiness failing or selector mismatch:
+```bash
+kubectl -n restricted get endpoints cost-estimator-service -o wide
+kubectl -n restricted describe pods -l app=cost-estimator
+```
+
+Port 8080 busy → use a different local port:
+```bash
+kubectl -n restricted port-forward svc/cost-estimator-service 9090:80
+```
+
+Terraform “connection refused” → cluster not ready; recreate it:
+```bash
+kind delete cluster --name dgx-demo && make kind-up
+```
